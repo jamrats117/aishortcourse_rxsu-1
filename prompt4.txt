@@ -2,7 +2,7 @@
 
 รายละเอียดของโปรเจกต์:
 
-* เก็บค่า `LINE_CHANNEL_ACCESS_TOKEN`, `SHEET_ID`, `SHEET_NAME` และ `QWEN_API_KEY` ใน Script Properties
+* เก็บค่า `CHANNEL_ACCESS_TOKEN`, `SHEET_ID`, `SHEET_NAME` และ `QWEN_API_KEY` ใน Script Properties
 * Google Sheet มี 6 คอลัมน์: code, herb, effect, description, loe, ref
 
 การทำงานของแชทบอท:

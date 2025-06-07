@@ -1,0 +1,105 @@
+เข้าใจแล้วครับ! ผมจะปรับ prompt ให้ **ใส่รายละเอียด** เพิ่มว่า:
+
+✅ **ใช้ `QWEN_API_KEY` จาก Script Properties**
+✅ **บอกให้ LLM ตอบกลับเป็นข้อความแบบภาษามนุษย์ / ไม่มี tag / จัดให้เรียบร้อยก่อนตอบ**
+
+---
+
+**Prompt (รวมทุกประเด็นที่คุณอยากให้เพิ่ม)**
+
+---
+
+**ฉันต้องการสร้าง Telegram Bot เชื่อมต่อ Dialogflow โดยใช้ Google Apps Script** เพื่อให้ Bot แสดงข้อมูลสมุนไพรจาก Google Sheet ตามที่ผู้ใช้พิมพ์มา
+
+รายละเอียดของโปรเจกต์:
+
+* เก็บค่า `LINE_CHANNEL_ACCESS_TOKEN`, `SHEET_ID`, `SHEET_NAME` และ `QWEN_API_KEY` ใน Script Properties
+* Google Sheet มี 6 คอลัมน์: code, herb, effect, description, loe, ref
+
+การทำงานของแชทบอท:
+1️⃣ รับข้อมูลจากผู้ใช้ (พิมพ์ชื่อสมุนไพร)
+2️⃣ ตรวจสอบชื่อสมุนไพรใน Google Sheet (คอลัมน์ herb)
+3️⃣ ถ้าพบสมุนไพร → ดึงข้อมูลจากคอลัมน์ effect, description, loe, ref
+4️⃣ ถ้าไม่พบสมุนไพร → ตอบกลับว่า “ไม่พบข้อมูลสมุนไพรในระบบ กรุณาติดต่อเจ้าหน้าที่”
+5️⃣ ถ้าผู้ใช้พิมพ์ “วิธีใช้งาน” → ส่งคู่มือการใช้งานให้
+
+ตัวอย่าง API responses จาก Dialogflow (เกิดขึ้นตรง get\_inr-followup):
+
+```json
+{
+  "responseId": "65865fc1-1f08-44f4-b177-231606c79fe6-996f169b",
+  "queryResult": {
+    "queryText": "ใช่",
+    "action": "get_INR.get_INR-yes",
+    "parameters": {},
+    "fulfillmentMessages": [ { "text": { "text": [""] } } ],
+    "outputContexts": [ {
+      "name": "projects/herb-v2-9li9/agent/sessions/28b0d05f-941e-bebb-fa58-0ac0569d815e/contexts/get_inr-followup",
+      "lifespanCount": 1,
+      "parameters": {
+        "herb.original": "กระเทียม",
+        "herb": "กระเทียม"
+      }
+    } ],
+    "intent": {
+      "displayName": "get_INR - yes"
+    }
+  }
+}
+```
+
+เพื่อดึงค่าพารามิเตอร์จาก Context:
+ให้ใช้ `request.queryResult.outputContexts` และวนลูปหา Context ตามชื่อดังนี้:
+
+```javascript
+var outputContexts = request.queryResult.outputContexts;
+var contextParameters = {};
+
+for (var i = 0; i < outputContexts.length; i++) {
+  if (outputContexts[i].name.endsWith('/contexts/get_inr-followup')) {
+    contextParameters = outputContexts[i].parameters;
+    break;
+  }
+}
+```
+
+หลังจากดึงข้อมูลสมุนไพรได้แล้ว →
+✅ ให้สร้าง **Prompt** สำหรับ LLM (qwen API) เพื่อสรุปข้อมูลเป็นข้อความภาษามนุษย์ ชัดเจน กระชับ ไม่เกิน 100 คำ (ไม่มี tag เช่น `<think>` หรือโค้ด JSON ในผลลัพธ์)
+✅ ให้สั่ง LLM ตอบกลับเป็นภาษาไทยที่อ่านง่าย **พร้อมใช้ส่งให้ผู้ใช้ทันที**
+✅ ใน Apps Script ให้ใช้ `QWEN_API_KEY` จาก Script Properties เพื่อเชื่อมต่อ qwen API (Groq endpoint)
+✅ ในขั้นตอนที่ต้องใช้ chat id ย้ำว่า chat_id ต้องแปลงเป็น String(chatId) 
+
+ตัวอย่างโค้ดเชื่อมต่อ QWEN:
+
+```javascript
+var apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+var apiKey = PropertiesService.getScriptProperties().getProperty('QWEN_API_KEY');
+
+var payload = JSON.stringify({
+  model: "qwen-qwq-32b",
+  messages: [
+    { role: "system", content: "คุณเป็นผู้ช่วยเภสัชกร ตอบคำถามเป็นภาษาไทย ไม่เกิน 100 คำ ห้ามใช้ภาษาอังกฤษ" },
+    { role: "user", content: prompt }
+  ],
+  temperature: 0.7
+});
+
+var options = {
+  method: "post",
+  contentType: "application/json",
+  headers: {
+    Authorization: "Bearer " + apiKey
+  },
+  payload: payload,
+  muteHttpExceptions: true
+};
+
+var response = UrlFetchApp.fetch(apiUrl, options);
+var json = JSON.parse(response.getContentText());
+var answer = json.choices[0].message.content;
+var cleanAnswer = answer.replace(/<think>|<\/think>/g, "");
+```
+
+สุดท้าย **ส่ง cleanAnswer ให้ผู้ใช้ใน Telegram** (ตัวอย่างใช้ฟังก์ชัน `sendMessage(chatId, cleanAnswer)`)
+
+
